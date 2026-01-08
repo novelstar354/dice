@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
 <meta charset="UTF-8">
-<title>カスタマイズ可能3Dサイコロゲーム（フル版）</title>
+<title>カスタマイズ可能3Dサイコロゲーム（マウス操作版）</title>
 <style>
   body { margin:0; overflow:hidden; font-family:sans-serif; }
   #ui {
@@ -129,10 +129,8 @@ function createDice(materialType,i,total){
 
   const shape = new CANNON.Box(new CANNON.Vec3(size/2,size/2,size/2));
   const body = new CANNON.Body({mass:1, shape:shape, material:new CANNON.Material()});
-  // 整列配置
   const spacing = 2.5;
   body.position.set((i-(total-1)/2)*spacing,5,0);
-  // ランダム初速度
   body.velocity.set(Math.random()*5-2.5,Math.random()*5,Math.random()*5-2.5);
   body.angularVelocity.set(Math.random()*20-10,Math.random()*20-10,Math.random()*20-10);
   body.angularDamping=0.1;
@@ -168,7 +166,6 @@ function rollDice(num){
   clearDice();
   const materialType=document.getElementById("dice-material").value;
   for(let i=0;i<num;i++) createDice(materialType,i,num);
-  // カメラ自動調整
   camera.position.set(0,15,20+num*2);
   rolling=true;
 }
@@ -202,11 +199,9 @@ function animate(){
       document.getElementById("result").textContent="出た目: "+results.join(", ");
       const total=results.reduce((a,b)=>a+b,0);
       document.getElementById("total").textContent="合計: "+total;
-      // 履歴に追加
       const li=document.createElement("li");
       li.textContent=`${results.join(", ")} (合計: ${total})`;
       historyList.prepend(li);
-      // 最大30件
       while(historyList.children.length>30) historyList.removeChild(historyList.lastChild);
     }
   }
@@ -226,6 +221,36 @@ window.addEventListener('resize',()=>{
   camera.aspect=window.innerWidth/window.innerHeight;
   camera.updateProjectionMatrix();
   renderer.setSize(window.innerWidth,window.innerHeight);
+});
+
+// ==== マウスでサイコロ回転 ====
+let selectedDice = null;
+let mouseDownPos = null;
+
+renderer.domElement.addEventListener('mousedown', (event)=>{
+  const mouse = new THREE.Vector2(
+    (event.clientX/window.innerWidth)*2 - 1,
+    -(event.clientY/window.innerHeight)*2 + 1
+  );
+  const raycaster = new THREE.Raycaster();
+  raycaster.setFromCamera(mouse,camera);
+  const intersects = raycaster.intersectObjects(diceMeshes);
+  if(intersects.length>0){
+    selectedDice = diceBodies[diceMeshes.indexOf(intersects[0].object)];
+    mouseDownPos = {x:event.clientX, y:event.clientY};
+  }
+});
+
+renderer.domElement.addEventListener('mouseup', (event)=>{
+  if(selectedDice && mouseDownPos){
+    const dx = event.clientX - mouseDownPos.x;
+    const dy = event.clientY - mouseDownPos.y;
+    // トルクを加えて回転
+    selectedDice.torque.x += dy * 0.2;
+    selectedDice.torque.y += dx * 0.2;
+    selectedDice = null;
+    mouseDownPos = null;
+  }
 });
 </script>
 </body>
