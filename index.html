@@ -2,17 +2,17 @@
 <html lang="ja">
 <head>
 <meta charset="UTF-8">
-<title>物理サイコロ フル版</title>
+<title>物理サイコロ スマホ・PC対応</title>
 <style>
 body { margin:0; font-family:sans-serif; text-align:center; background:#f0f0f0; }
-canvas { display:block; margin: 0 auto; border:1px solid #ccc; }
+canvas { display:block; margin: 0 auto; border:1px solid #ccc; width: 100%; height: 60vh; }
 button, select, input { font-size:16px; margin:5px; padding:5px 10px; }
 #history { margin-top:20px; max-height:200px; overflow-y:auto; background:#fff; padding:10px; border-radius:5px; text-align:left;}
 </style>
 </head>
 <body>
 
-<h1>物理サイコロ フル版</h1>
+<h1>物理サイコロ</h1>
 
 <p>
 サイコロの数: <input type="number" id="diceCount" value="1" min="1" max="5">
@@ -33,9 +33,9 @@ button, select, input { font-size:16px; margin:5px; padding:5px 10px; }
 </select>
 </p>
 
-<p>マウスドラッグで投げる方向と力を決められます</p>
+<p>ドラッグまたはタッチで投げる方向と力を決められます</p>
 
-<canvas id="diceCanvas" width="600" height="400"></canvas>
+<canvas id="diceCanvas"></canvas>
 
 <h3>振った履歴</h3>
 <div id="history"></div>
@@ -62,13 +62,15 @@ function init(){
     scene = new THREE.Scene();
     scene.background = new THREE.Color(0xf0f0f0);
 
-    camera = new THREE.PerspectiveCamera(45, canvas.width/canvas.height, 0.1, 100);
+    camera = new THREE.PerspectiveCamera(45, canvas.clientWidth/canvas.clientHeight, 0.1, 100);
     camera.position.set(0,10,15);
 
     renderer = new THREE.WebGLRenderer({canvas:canvas, antialias:true});
-    renderer.setSize(canvas.width,canvas.height);
+    resizeCanvas();
 
     controls = new THREE.OrbitControls(camera, renderer.domElement);
+    controls.enablePan = true;
+    controls.enableZoom = true;
 
     const light = new THREE.DirectionalLight(0xffffff,1);
     light.position.set(10,10,10);
@@ -84,21 +86,29 @@ function init(){
 
     // 物理ワールド
     world = new CANNON.World({gravity:new CANNON.Vec3(0,-9.82,0)});
-
     const floorBody = new CANNON.Body({mass:0});
     floorBody.addShape(new CANNON.Plane());
     floorBody.quaternion.setFromEuler(-Math.PI/2,0,0);
     world.addBody(floorBody);
 
-    // マウスイベント
+    // マウス / タッチイベント
     canvas.addEventListener('mousedown', e=>{isDragging=true; dragStart={x:e.offsetX, y:e.offsetY};});
     canvas.addEventListener('mouseup', e=>{
-        if(isDragging){
-            dragEnd={x:e.offsetX, y:e.offsetY};
-            throwDice(dragStart, dragEnd);
-            isDragging=false;
-        }
+        if(isDragging){ dragEnd={x:e.offsetX, y:e.offsetY}; throwDice(dragStart, dragEnd); isDragging=false; }
     });
+    canvas.addEventListener('touchstart', e=>{ isDragging=true; dragStart={x:e.touches[0].clientX, y:e.touches[0].clientY}; });
+    canvas.addEventListener('touchend', e=>{ 
+        if(isDragging){ dragEnd={x:e.changedTouches[0].clientX, y:e.changedTouches[0].clientY}; throwDice(dragStart, dragEnd); isDragging=false; }
+    });
+
+    window.addEventListener('resize', resizeCanvas);
+}
+
+function resizeCanvas(){
+    const canvas = document.getElementById("diceCanvas");
+    camera.aspect = canvas.clientWidth/canvas.clientHeight;
+    camera.updateProjectionMatrix();
+    renderer.setSize(canvas.clientWidth, canvas.clientHeight);
 }
 
 // サイコロ作成
@@ -109,16 +119,15 @@ function createDice(materialName){
     for(let j=1;j<=6;j++){
         materials.push(new THREE.MeshPhongMaterial({map:loader.load(`${materialName}${j}.png`)}));
     }
-    const diceMesh = new THREE.Mesh(geo,materials);
-    return diceMesh;
+    return new THREE.Mesh(geo,materials);
 }
 
+// 投げる
 function throwDice(start, end){
     const materialName = document.getElementById("diceMaterial").value;
     const soundFile = document.getElementById("diceSound").value;
     diceCount = parseInt(document.getElementById("diceCount").value);
 
-    // 前のサイコロを削除
     diceMeshes.forEach(d=>scene.remove(d));
     diceMeshes=[];
     diceBodies.forEach(d=>world.removeBody(d));
@@ -128,7 +137,6 @@ function throwDice(start, end){
     const audio = new Audio(soundFile);
     audio.play();
 
-    // 投げるベクトル
     const forceX = (end.x - start.x)/50;
     const forceZ = (start.y - end.y)/50;
 
@@ -141,15 +149,15 @@ function throwDice(start, end){
         const diceBody = new CANNON.Body({mass:1, shape:new CANNON.Box(new CANNON.Vec3(0.5,0.5,0.5))});
         diceBody.position.set((i-(diceCount-1)/2)*2,1,0);
         diceBody.quaternion.set(Math.random(),Math.random(),Math.random(),1);
-        diceBody.velocity.set(forceX*5, 5, forceZ*5); // 投げる力
+        diceBody.velocity.set(forceX*5, 5, forceZ*5);
         world.addBody(diceBody);
         diceBodies.push(diceBody);
     }
 
-    // 数秒後に結果判定
-    setTimeout(checkDiceResult, 2000);
+    setTimeout(checkDiceResult,2000);
 }
 
+// 結果判定
 function checkDiceResult(){
     let results = [];
     diceBodies.forEach(dice=>{
