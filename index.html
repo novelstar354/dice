@@ -2,256 +2,93 @@
 <html lang="ja">
 <head>
 <meta charset="UTF-8">
-<title>カスタマイズ可能3Dサイコロゲーム（マウス操作版）</title>
+<title>カスタマイズサイコロ</title>
 <style>
-  body { margin:0; overflow:hidden; font-family:sans-serif; }
-  #ui {
-    position: absolute;
-    top:10px;
-    left:50%;
-    transform:translateX(-50%);
-    background: rgba(255,255,255,0.9);
-    padding: 10px 20px;
-    border-radius: 10px;
-    z-index:10;
-    text-align:center;
+  body {
+    font-family: sans-serif;
+    text-align: center;
+    padding: 50px;
+    background-color: #f0f0f0;
   }
-  #result,#total { margin-top:5px; font-size:16px; }
-  select,input,button { margin:2px; font-size:14px; }
-  #history { margin-top:10px; max-height:120px; overflow-y:auto; text-align:left; background:#f0f0f0; padding:5px; border-radius:5px; font-size:14px;}
+  #dice {
+    width: 100px;
+    height: 100px;
+    margin: 20px auto;
+    transition: transform 0.5s ease;
+  }
+  button {
+    font-size: 18px;
+    padding: 10px 20px;
+    margin: 5px;
+    cursor: pointer;
+  }
+  label {
+    font-size: 16px;
+  }
 </style>
 </head>
 <body>
-<div id="ui">
-  サイコロ数: <input type="number" id="dice-number" min="1" max="6" value="2">
-  サイコロ素材: 
-  <select id="dice-material">
-    <option value="default">白</option>
-    <option value="metal">金属</option>
-    <option value="wood">木</option>
-    <option value="red">赤</option>
-    <option value="blue">青</option>
-  </select>
-  音: 
-  <select id="dice-sound">
-    <option value="click">クリック音</option>
-    <option value="metal">金属音</option>
-    <option value="wood">木</option>
-  </select>
-  <button id="roll-btn">振る</button>
-  <button id="reset-btn">リセット</button>
-  <div id="result">出た目: </div>
-  <div id="total">合計: </div>
-  <div id="history"><strong>履歴:</strong><ul id="history-list"></ul></div>
-</div>
 
-<script src="https://cdn.jsdelivr.net/npm/three@0.156.0/build/three.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/three@0.156.0/examples/js/controls/OrbitControls.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/cannon-es@0.20.0/dist/cannon-es.js"></script>
+<h1>サイコロを振ろう！</h1>
+
+<img id="dice" src="dice1.png" alt="サイコロ">
+
+<p>
+  <button onclick="rollDice()">振る</button>
+</p>
+
+<p id="result"></p>
+
+<h3>カスタマイズ</h3>
+<label>サイコロ素材:
+  <select id="diceMaterial" onchange="changeMaterial()">
+    <option value="dice1.png">クラシック</option>
+    <option value="dice2.png">木目</option>
+    <option value="dice3.png">金属</option>
+  </select>
+</label>
+<br>
+<label>サイコロ音:
+  <select id="diceSound">
+    <option value="dice_roll1.mp3">カチカチ</option>
+    <option value="dice_roll2.mp3">ゴロゴロ</option>
+    <option value="dice_roll3.mp3">ドン</option>
+  </select>
+</label>
 
 <script>
-// ==== Three.js ====
-const scene = new THREE.Scene();
-scene.background = new THREE.Color(0x87ceeb);
-const camera = new THREE.PerspectiveCamera(45,window.innerWidth/window.innerHeight,0.1,1000);
-camera.position.set(0,15,20);
-const renderer = new THREE.WebGLRenderer({antialias:true});
-renderer.setSize(window.innerWidth,window.innerHeight);
-document.body.appendChild(renderer.domElement);
+let currentMaterial = "dice1.png";
 
-// OrbitControls
-const controls = new THREE.OrbitControls(camera, renderer.domElement);
-controls.target.set(0,0,0);
-controls.update();
-
-// ライト
-scene.add(new THREE.AmbientLight(0xffffff,0.7));
-const dirLight = new THREE.DirectionalLight(0xffffff,0.7);
-dirLight.position.set(10,20,10);
-scene.add(dirLight);
-
-// 地面
-const planeGeo = new THREE.PlaneGeometry(20,20);
-const planeMat = new THREE.MeshStandardMaterial({color:0x228B22});
-const planeMesh = new THREE.Mesh(planeGeo,planeMat);
-planeMesh.rotation.x=-Math.PI/2;
-scene.add(planeMesh);
-
-// ==== Cannon.js ====
-const world = new CANNON.World({ gravity:new CANNON.Vec3(0,-9.82,0) });
-world.defaultContactMaterial = new CANNON.ContactMaterial(new CANNON.Material(), new CANNON.Material(), { friction:0.3, restitution:0.6 });
-const groundMat = new CANNON.Material();
-const groundBody = new CANNON.Body({ type:CANNON.Body.STATIC, shape:new CANNON.Plane(), material:groundMat });
-groundBody.quaternion.setFromEuler(-Math.PI/2,0,0);
-world.addBody(groundBody);
-
-// 音
-const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-function playSound(type,force=0.5){
-  const osc = audioCtx.createOscillator();
-  const gain = audioCtx.createGain();
-  osc.connect(gain);
-  gain.connect(audioCtx.destination);
-  osc.type = (type==='metal')?'triangle':(type==='wood')?'sawtooth':'square';
-  osc.frequency.value = 150 + Math.random()*400;
-  gain.gain.setValueAtTime(Math.min(force*0.25,0.25),audioCtx.currentTime);
-  osc.start(); osc.stop(audioCtx.currentTime+0.08);
+function changeMaterial() {
+    const select = document.getElementById("diceMaterial");
+    currentMaterial = select.value;
+    document.getElementById("dice").src = currentMaterial.replace("1", "1"); // 初期目を1に
 }
 
-// サイコロ
-const diceMeshes=[];
-const diceBodies=[];
-const faceSymbols=["⚀","⚁","⚂","⚃","⚄","⚅"];
-const historyList = document.getElementById("history-list");
-
-// サイコロ作成
-function createDice(materialType,i,total){
-  const size=1;
-  const geo=new THREE.BoxGeometry(size,size,size);
-  let materials=[];
-  for(let f=0; f<6; f++){
-    const canvas=document.createElement("canvas");
-    canvas.width=128; canvas.height=128;
-    const ctx=canvas.getContext("2d");
-    let bg="white";
-    if(materialType==='metal') bg="#c0c0c0";
-    else if(materialType==='wood') bg="#deb887";
-    else if(materialType==='red') bg="#ff6666";
-    else if(materialType==='blue') bg="#6699ff";
-    ctx.fillStyle=bg; ctx.fillRect(0,0,128,128);
-    ctx.fillStyle="black";
-    ctx.font="64px sans-serif"; ctx.textAlign="center"; ctx.textBaseline="middle";
-    ctx.fillText(faceSymbols[f],64,64);
-    materials.push(new THREE.MeshStandardMaterial({map:new THREE.CanvasTexture(canvas)}));
-  }
-  const mesh=new THREE.Mesh(geo,materials);
-  scene.add(mesh); diceMeshes.push(mesh);
-
-  const shape = new CANNON.Box(new CANNON.Vec3(size/2,size/2,size/2));
-  const body = new CANNON.Body({mass:1, shape:shape, material:new CANNON.Material()});
-  const spacing = 2.5;
-  body.position.set((i-(total-1)/2)*spacing,5,0);
-  body.velocity.set(Math.random()*5-2.5,Math.random()*5,Math.random()*5-2.5);
-  body.angularVelocity.set(Math.random()*20-10,Math.random()*20-10,Math.random()*20-10);
-  body.angularDamping=0.1;
-  world.addBody(body);
-  diceBodies.push(body);
-
-  body.addEventListener('collide', e=>{
-    const impact = e.contact.getImpactVelocityAlongNormal();
-    if(impact>0.5){
-      const soundType = document.getElementById("dice-sound").value;
-      playSound(soundType,impact);
-    }
-  });
+function rollDice() {
+    const dice = document.getElementById("dice");
+    const resultText = document.getElementById("result");
+    
+    // 音を再生
+    const soundSelect = document.getElementById("diceSound");
+    const audio = new Audio(soundSelect.value);
+    audio.play();
+    
+    // 1〜6のランダム
+    const roll = Math.floor(Math.random() * 6) + 1;
+    
+    // 回転アニメーション
+    dice.style.transform = "rotateX(" + (Math.random()*720) + "deg) rotateY(" + (Math.random()*720) + "deg)";
+    
+    // 結果を表示
+    setTimeout(() => {
+        // 選んだ素材で目を変更（dice1.png〜dice6.png が必要）
+        const base = currentMaterial.replace(/[1-6]\.png/, ''); // 画像のベース名
+        dice.src = base + roll + ".png";
+        resultText.textContent = "出た目は " + roll + "！";
+    }, 500);
 }
-
-// サイコロ目判定
-function getDiceFace(body){
-  const up = new CANNON.Vec3(0,1,0);
-  const axes = [ new CANNON.Vec3(0,1,0), new CANNON.Vec3(0,-1,0),
-                 new CANNON.Vec3(1,0,0), new CANNON.Vec3(-1,0,0),
-                 new CANNON.Vec3(0,0,1), new CANNON.Vec3(0,0,-1)];
-  let maxDot=-1,faceIndex=0;
-  for(let i=0;i<axes.length;i++){
-    const worldAxis = body.quaternion.vmult(axes[i]);
-    const dot = worldAxis.dot(up);
-    if(dot>maxDot){ maxDot=dot; faceIndex=i; }
-  }
-  return [5,6,3,4,1,2][faceIndex];
-}
-
-// Roll
-function rollDice(num){
-  clearDice();
-  const materialType=document.getElementById("dice-material").value;
-  for(let i=0;i<num;i++) createDice(materialType,i,num);
-  camera.position.set(0,15,20+num*2);
-  rolling=true;
-}
-
-// Reset
-function clearDice(){
-  diceMeshes.forEach(m=>scene.remove(m));
-  diceBodies.forEach(b=>world.removeBody(b));
-  diceMeshes.length=0; diceBodies.length=0;
-  document.getElementById("result").textContent="出た目: ";
-  document.getElementById("total").textContent="合計: ";
-}
-
-// Animate
-let rolling=false;
-const timeStep=1/60;
-function animate(){
-  requestAnimationFrame(animate);
-  world.step(timeStep);
-
-  diceMeshes.forEach((m,i)=>{
-    m.position.copy(diceBodies[i].position);
-    m.quaternion.copy(diceBodies[i].quaternion);
-  });
-
-  if(rolling){
-    const moving=diceBodies.some(b=>b.velocity.length()>0.05 || b.angularVelocity.length()>0.05);
-    if(!moving){
-      rolling=false;
-      const results=diceBodies.map(getDiceFace);
-      document.getElementById("result").textContent="出た目: "+results.join(", ");
-      const total=results.reduce((a,b)=>a+b,0);
-      document.getElementById("total").textContent="合計: "+total;
-      const li=document.createElement("li");
-      li.textContent=`${results.join(", ")} (合計: ${total})`;
-      historyList.prepend(li);
-      while(historyList.children.length>30) historyList.removeChild(historyList.lastChild);
-    }
-  }
-
-  renderer.render(scene,camera);
-}
-animate();
-
-// UI
-document.getElementById("roll-btn").addEventListener("click",()=>{
-  const num=parseInt(document.getElementById("dice-number").value);
-  if(num<1||num>6){ alert("1〜6で入力"); return;}
-  rollDice(num);
-});
-document.getElementById("reset-btn").addEventListener("click",clearDice);
-window.addEventListener('resize',()=>{
-  camera.aspect=window.innerWidth/window.innerHeight;
-  camera.updateProjectionMatrix();
-  renderer.setSize(window.innerWidth,window.innerHeight);
-});
-
-// ==== マウスでサイコロ回転 ====
-let selectedDice = null;
-let mouseDownPos = null;
-
-renderer.domElement.addEventListener('mousedown', (event)=>{
-  const mouse = new THREE.Vector2(
-    (event.clientX/window.innerWidth)*2 - 1,
-    -(event.clientY/window.innerHeight)*2 + 1
-  );
-  const raycaster = new THREE.Raycaster();
-  raycaster.setFromCamera(mouse,camera);
-  const intersects = raycaster.intersectObjects(diceMeshes);
-  if(intersects.length>0){
-    selectedDice = diceBodies[diceMeshes.indexOf(intersects[0].object)];
-    mouseDownPos = {x:event.clientX, y:event.clientY};
-  }
-});
-
-renderer.domElement.addEventListener('mouseup', (event)=>{
-  if(selectedDice && mouseDownPos){
-    const dx = event.clientX - mouseDownPos.x;
-    const dy = event.clientY - mouseDownPos.y;
-    // トルクを加えて回転
-    selectedDice.torque.x += dy * 0.2;
-    selectedDice.torque.y += dx * 0.2;
-    selectedDice = null;
-    mouseDownPos = null;
-  }
-});
 </script>
+
 </body>
 </html>
